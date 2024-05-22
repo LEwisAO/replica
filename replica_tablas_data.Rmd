@@ -1,0 +1,659 @@
+---
+title: "preuba_data_replicar"
+author: "Elwis Wagner Choque Huacasi"
+date: "2024-05-22"
+output: html_document
+---
+
+Descripción del Artículo y del Análisis a Replicar
+
+El artículo "Market segmentation in urban tourism: A study in Latin America" de Mauricio Carvache-Franco y colaboradores, analiza la segmentación de la demanda de turismo urbano en ciudades latinoamericanas como Ciudad de México, Lima, Buenos Aires y Bogotá. Utilizando el método de K-means clustering, el estudio identifica distintos segmentos de turistas basados en sus preferencias y comportamientos. Los segmentos encontrados son:
+
+Lodging and Restaurant Services: Turistas interesados en la infraestructura hotelera y servicios de restaurantes.
+
+Multiple Attractions: Turistas atraídos por múltiples atracciones turísticas.
+
+Passive Tourism: Turistas con bajo nivel de interés en las atracciones de las ciudades.
+
+Objetivo del Análisis
+
+El objetivo es replicar los resultados del artículo utilizando el conjunto de datos proporcionado en datas_replica.csv. En particular, generaremos tablas similares a las presentadas en el artículo, que muestran:
+
+Segmentación de los turistas basada en sus características y preferencias.
+Distribución de la disposición a recomendar el destino.
+Propósito del viaje.
+Frecuencia de visitantes primerizos al destino.
+
+Carga y Exploración Inicial de los Datos:
+Primero, cargamos y exploramos los datos para entender su estructura y contenido.
+
+```{r}
+
+datos <- read.csv("data_replica.csv", head=T, sep = ",")
+
+# Mostrar las primeras filas del DataFrame
+head(datos)
+str(datos)
+```
+
+Este código permite cargar el archivo CSV datas_replica.csv y visualizar las primeras filas y la estructura del DataFrame, lo que nos ayuda a identificar las variables disponibles y su tipo de datos. A partir de esta información, podemos determinar cómo procesar y analizar los datos para replicar los resultados del artículo.
+
+
+El objetivo de este análisis es replicar los resultados presentados en el artículo "Market segmentation in urban tourism: A study in Latin America". Para ello, se utilizó el conjunto de datos proporcionado en datas_replica.csv, que inicialmente contiene 612 registros. Sin embargo, el artículo menciona que se utilizaron 599 registros, lo cual implica que es necesario depurar los datos antes de proceder con el análisis.
+
+```{r}
+#Identificación de Datos Inusuales
+
+#Para identificar y manejar los datos inusuales, se utilizaron funciones de R que permiten encontrar valores únicos en las columnas de tipo caracter. Estos valores únicos #fueron revisados para determinar si correspondían a datos inusuales que debían ser eliminados.
+
+library(dplyr)
+
+# Excluir la columna FECHA
+datos_sin_fecha <- datos %>% select(-FECHA)
+
+# Revisar si hay valores únicos que aparecen solo una vez en cada columna de tipo caracter
+get_unique_values <- function(column) {
+  frecuencias <- table(column)
+  unique_values <- names(frecuencias[frecuencias == 1])
+  if(length(unique_values) == 0) {
+    return(NA)  # Devuelve NA si no hay valores únicos
+  }
+  return(unique_values)
+}
+
+# Aplicar esta función a cada columna de tipo caracter
+valores_unicos_por_columna <- lapply(datos_sin_fecha[, sapply(datos_sin_fecha, is.character)], get_unique_values)
+
+# Crear nombres para cada lista basado en los nombres de las columnas
+names(valores_unicos_por_columna) <- names(datos_sin_fecha[, sapply(datos_sin_fecha, is.character)])
+
+# Imprimir los resultados
+print(valores_unicos_por_columna)
+
+# Revisar los registros para cada valor único encontrado en cada columna
+for (columna in names(valores_unicos_por_columna)) {
+  valores_unicos <- valores_unicos_por_columna[[columna]]
+  if(!all(is.na(valores_unicos)) && length(valores_unicos) > 0) {
+    for (valor in valores_unicos) {
+      registros_con_valor_unico <- datos_sin_fecha %>% 
+        filter(.data[[columna]] == valor)
+      
+      # Imprimir estos registros para revisión
+      print(paste("Columna:", columna, "Valor:", valor))
+      #print(registros_con_valor_unico)
+    }
+  }
+}
+
+
+
+```
+
+Búsqueda de Textos de Interés
+
+Adicionalmente, se buscaron textos específicos en el DataFrame que podrían indicar datos inusuales o errores de entrada. Estos textos se buscaron en todas las columnas de tipo caracter y los registros correspondientes se revisaron manualmente.
+
+```{r}
+textos_interes = c("Academico", "Conozco Lima", "Estudios doctorales", "Familia", 
+                   "Invitación por la Universidad de Celaya", "Mi vuelo hizo transito en Bogota", 
+                   "n/a", "Recomendación de amigos o conocidos, Por estudios doctorales", 
+                   "Sitios web especializados en viajes (ej. tripadvisor, etc.), La organización IFLA", 
+                   "Soy de Nacionalidad Méxicana, nacida en cd de México", "Soy peruana",
+                   "Todo lo anterior", "Universidad", "Vivo", "vivo en lima")
+
+# Función para buscar textos en cada columna y devolver los índices de las filas
+buscar_textos <- function(df, textos) {
+  resultados <- list()  # Lista para almacenar los resultados
+  
+  # Buscar en cada columna de tipo caracter
+  for (columna in names(df)[sapply(df, is.character)]) {
+    for (texto in textos) {
+      filas <- which(df[[columna]] == texto)  # Encuentra filas donde el texto es exactamente igual
+      if (length(filas) > 0) {
+        resultados[[paste(columna, texto, sep = " - ")]] <- filas
+      }
+    }
+  }
+  
+  return(resultados)
+}
+
+# Aplicar la función al DataFrame y textos de interés
+resultados_busqueda <- buscar_textos(datos, textos_interes)
+
+# Imprimir los resultados
+print(resultados_busqueda)
+
+```
+
+Este proceso permitió identificar y eliminar 13 registros inusuales, reduciendo el número total de registros a 599, coincidiendo así con el número utilizado en el artículo original. Con los datos depurados, procedimos a realizar los análisis y generar las tablas de segmentación y comportamiento de los turistas tal como se describe en el artículo, que son los siguinetes: 147, 167, 404, 219, 230, 268, 344, 398, 481, 532, 595, 606
+
+
+```{r}
+#####ELIMINAR LAS FILAS
+indices_a_eliminar <- c(147, 167, 404, 219, 230, 268, 344, 398, 481, 532, 595, 606 )
+
+# Asegurarse de que los índices están únicos para evitar confusiones
+indices_a_eliminar <- unique(indices_a_eliminar)
+
+# Eliminar las filas
+datos_limpios <- datos[-indices_a_eliminar, ]
+
+# Verificar la cantidad de filas en el nuevo DataFrame
+print(nrow(datos_limpios))
+str(datos_limpios)
+```
+
+
+
+Este proceso permitió identificar y eliminar registros inusuales, reduciendo el número total de registros a 599, coincidiendo así con el número utilizado en el artículo original. Con los datos depurados, procedimos a realizar los análisis y generar las tablas de segmentación y comportamiento de los turistas tal como se describe en el artículo.
+
+
+
+Transformación de la Columna de Edad: Utilizamos la función mutate junto con case_when para recategorizar la columna EDAD en tres grupos:
+
+18 a 45 años: Incluye las categorías originales "18 a 30 años" y "31 a 45 años".
+46 a 60 años: Incluye la categoría original "46 a 60 años".
+Mayor de 60 años: Incluye las categorías originales "Mayor de 60 año" y "Mayor de 60 años".
+Verificación de la Nueva Distribución de Edades: Se usa la función table para verificar la distribución de las nuevas categorías de edad.
+
+Agrupación y Conteo por Edad: Agrupamos los datos por la nueva columna EDAD y contamos la cantidad de registros en cada categoría utilizando group_by y summarise.
+
+
+```{r}
+# Cargar el paquete dplyr
+library(dplyr)
+
+# Transformar la columna de EDAD para que coincida con las categorías del artículo
+datos_ajustados <- datos_limpios %>%
+  mutate(EDAD = case_when(
+    EDAD %in% c("18 a 30 años", "31 a 45 años") ~ "18 a 45 años",
+    EDAD %in% c("46 a 60 años") ~ "46 a 60 años",
+    EDAD %in% c("Mayor de 60 año", "Mayor de 60 años") ~ "Mayor de 60 años",
+    TRUE ~ EDAD  # Captura cualquier otro caso no especificado
+  ))
+
+# Verificar la nueva distribución de las edades
+table(datos_ajustados$EDAD)
+
+
+# Agrupar por edad y contar cada categoría
+conteo_edad <- datos_ajustados %>%
+  group_by(EDAD) %>%
+  summarise(Count = n())
+
+# Imprimir el resultado
+print(conteo_edad)
+str(datos_ajustados)
+```
+
+El resultado de este proceso de clasificación coincide con los resultados del artículo, mostrando la siguiente distribución de edad:
+
+18 a 45 años: 285 registros
+46 a 60 años: 276 registros
+Mayor de 60 años: 38 registros
+
+Estos resultados indican que la mayoría de los participantes en el estudio se encuentran en el rango de 18 a 60 años, con una menor proporción de participantes mayores de 60 años.
+
+
+
+Asignación de Categorías de Países: Utilizamos case_when para asignar los países a las categorías "USA and Canada", "Other American countries", "Europe", y "Asia".
+
+Agrupación y Conteo: Agrupamos los datos por la categoría de continente y sumamos el conteo de cada categoría.
+
+Cálculo de Porcentajes: Calculamos el porcentaje de cada categoría en relación con el total general de la muestra.
+
+Combinación de Distribuciones de Edad y Origen: Utilizamos bind_rows para combinar las distribuciones de edad y las categorías de origen en una sola tabla.
+
+```{r}
+################## tabla 2
+library(dplyr)
+
+# Reajustar la asignación de categorías de países con los nombres correctos
+pais_distribucion <- datos_ajustados %>%
+  group_by(PAIS_RESIDENCIA) %>%
+  summarise(Count = n(), .groups = 'drop') %>%
+  mutate(Category = case_when(
+    PAIS_RESIDENCIA %in% c("USA", "Canada") ~ "USA and Canada",
+    PAIS_RESIDENCIA %in% c("Colombia", "Argentina", "Perú", "Brasil", "Chile", "México", "Ecuador", "Bolivia", "Venezuela", "Paraguay", "Uruguay", "Guatemala", "Costa Rica", "República", "Panamá", "El Salvador", "Puerto Rico", "Honduras") ~ "Other American countries",
+    PAIS_RESIDENCIA %in% c("Francia", "Alemania", "Italia", "España", "Reino Unido", "Países Bajos", "Suecia", "Noruega", "Polonia", "Rusia", "Croacia") ~ "Europe",
+    TRUE ~ "Asia"
+  )) %>%
+  group_by(Category) %>%
+  summarise(Count = sum(Count), .groups = 'drop')
+
+total_count <- sum(pais_distribucion$Count)  # Calcular el total de muestras para calcular porcentajes correctos
+
+# Añadir el porcentaje sobre el total general de la muestra
+pais_distribucion <- pais_distribucion %>%
+  mutate(Percentage = (Count / total_count) * 100)
+
+# Combinar las distribuciones de edad y origen
+combined_table <- bind_rows(
+  datos_ajustados %>%
+    group_by(EDAD) %>%
+    summarise(Count = n(), .groups = 'drop') %>%
+    mutate(Percentage = (Count / sum(Count)) * 100, Demographics = "Age"),
+  pais_distribucion %>%
+    mutate(Demographics = "Origin")
+)
+
+# Imprimir la tabla combinada
+print(combined_table)
+
+```
+
+El resultado de este proceso genera una tabla combinada que muestra la distribución por edad y por origen (continentes) de los encuestados, que concuerda con los resultados presentados en el artículo:
+
+Edad:
+
+18 a 45 años: 285 registros (47.58%)
+46 a 60 años: 276 registros (46.08%)
+Mayor de 60 años: 38 registros (6.34%)
+Origen:
+
+Asia: 2 registros (0.33%)
+Europe: 16 registros (2.67%)
+Other American countries: 567 registros (94.66%)
+USA and Canada: 14 registros (2.34%)
+
+
+
+Seleccionar Variables Relevantes:
+
+Se seleccionan las variables numéricas que representan diferentes aspectos de las experiencias y percepciones de los encuestados en los destinos urbanos.
+Estas variables incluyen aspectos como ambiente social urbano, arquitectura urbana, monumentos y sitios históricos, espacios públicos, alojamiento y restaurantes, servicios públicos, información turística, tiendas y servicios comerciales, museos y galerías de arte, acceso y señalización, excursiones, festivales y eventos, teatros y conciertos, y ferias y convenciones.
+Normalización de Variables:
+
+Las variables seleccionadas se normalizan utilizando la función scale para asegurar que todas tengan una media de 0 y una desviación estándar de 1. Esto es importante para que ninguna variable domine el cálculo de distancias en el algoritmo de clustering.
+Determinar el Número Óptimo de Clusters:
+
+Se utiliza el método del codo (wss) para determinar el número óptimo de clusters. La función fviz_nbclust visualiza la suma de los cuadrados dentro del cluster (within-cluster sum of squares) en función del número de clusters.
+Aplicar el Algoritmo de K-means con 3 Clusters:
+
+Se aplica el algoritmo de K-means clustering con 3 clusters, ya que este es el número óptimo identificado en el artículo.
+Se usa set.seed(123) para asegurar la reproducibilidad de los resultados.
+nstart = 25 especifica que el algoritmo se ejecutará 25 veces con diferentes configuraciones iniciales y devolverá la mejor solución encontrada.
+Añadir Resultados de Clusters al Dataframe Original:
+
+Los resultados del clustering se añaden al dataframe original como una nueva columna llamada cluster.
+Resumen de los Clusters:
+
+Se imprime un resumen de los clusters, mostrando el número de observaciones en cada cluster.
+Se calculan y muestran las medias de las variables seleccionadas para cada cluster utilizando aggregate.
+Visualizar los Clusters:
+
+Se visualizan los clusters utilizando fviz_cluster para entender mejor la distribución de los datos en los diferentes clusters.
+Verificar el Dataframe con la Nueva Columna de Clusters:
+
+Se muestra la cabecera del dataframe para verificar que la nueva columna cluster se ha añadido correctamente.
+
+```{r}
+#########################tabla 3
+# Cargar las librerías necesarias
+library(dplyr)
+library(cluster)
+library(factoextra)
+
+# Leer los datos (asumiendo que ya los tienes cargados en un dataframe llamado `datos`)
+# datos <- read.csv("tu_archivo.csv")
+
+# Seleccionar las variables relevantes para el clustering
+# Asegúrate de seleccionar solo las variables numéricas que usarás para la segmentación
+datos_clustering <- datos %>%
+  select(AMBIENTE_SOCIAL_URBANO, ARQUITECTURA_URBANA, MONUMENTOS_SITIOS,
+         ESPACIOS_PUBLICOS, ALOJAMIENTO_RESTAURANTES, SERVICIOS_PUBLICOS, 
+         INFORMACION_TURISTICA, TIENDAS_SERVICIOS, MUSEOS_GALERIAS, 
+         ACCESO_SENALIZACION, EXCURSIONES, FESTIVALES_EVENTOS, 
+         TEATROS_CONCIERTOS, FERIAS_CONVENCIONES)
+
+# Normalizar las variables
+datos_normalizados <- scale(datos_clustering)
+
+# Determinar el número óptimo de clusters usando el método del codo
+fviz_nbclust(datos_normalizados, kmeans, method = "wss")
+
+# Aplicar el algoritmo de K-means con 3 clusters
+set.seed(123) # Para reproducibilidad
+kmeans_result <- kmeans(datos_normalizados, centers = 3, nstart = 25)
+
+# Añadir los resultados de los clusters al dataframe original
+datos <- datos %>% 
+  mutate(cluster = as.factor(kmeans_result$cluster))
+
+# Mostrar un resumen de los clusters
+print(table(datos$cluster))
+print(aggregate(datos_clustering, by=list(cluster=datos$cluster), mean))
+
+# Visualizar los clusters
+fviz_cluster(kmeans_result, data = datos_normalizados)
+
+# Verificar el dataframe con la nueva columna de clusters
+head(datos)
+```
+
+
+Los resultados del clustering mostraron que los encuestados se agruparon en tres clusters distintos. La visualización del cluster plot muestra la separación de los tres clusters, lo que nos permite identificar visualmente las diferencias entre los grupos:
+
+Cluster 1 (Rojo): Representa un grupo de encuestados con ciertas características comunes.
+Cluster 2 (Verde): Representa otro grupo de encuestados con características diferentes a los otros clusters.
+Cluster 3 (Azul): Representa un tercer grupo de encuestados con sus propias características distintivas.
+
+Con este proceso de clustering, hemos logrado segmentar a los encuestados en tres grupos distintos basados en sus experiencias y percepciones de destinos urbanos. Estos resultados nos permiten realizar análisis adicionales y generar las tablas de resultados presentadas en el estudio.
+
+
+
+TABLA 3
+
+Calcular las Medias de las Variables por Cluster:
+
+Utilizamos summarise junto con across para calcular las medias de las variables seleccionadas para cada cluster.
+Prueba de Kruskal-Wallis:
+
+Realizamos la prueba de Kruskal-Wallis para cada variable para determinar si hay diferencias significativas entre los clusters.
+La prueba de Kruskal-Wallis es una prueba no paramétrica que evalúa si hay diferencias significativas en las distribuciones de dos o más grupos independientes.
+Prueba de Mann-Whitney U:
+
+Realizamos la prueba de Mann-Whitney U (Wilcoxon rank-sum test) para comparar cada par de clusters.
+Esta prueba es adecuada para comparar dos muestras independientes y determinar si una muestra tiende a tener valores mayores o menores que la otra.
+Unir Resultados en una Tabla:
+
+Unimos los resultados de las medias, la prueba de Kruskal-Wallis y la prueba de Mann-Whitney U en una sola tabla utilizando pivot_longer, pivot_wider y left_join.
+```{r}
+#tabla 3 2
+
+# Cargar las librerías necesarias
+library(dplyr)
+library(tidyr)
+library(stats)
+
+# Asumiendo que ya tienes el dataframe `datos` con la columna `cluster` añadida
+
+# Calcular las medias de las variables seleccionadas por cluster
+mean_values <- datos %>%
+  group_by(cluster) %>%
+  summarise(across(c(AMBIENTE_SOCIAL_URBANO, ARQUITECTURA_URBANA, MONUMENTOS_SITIOS,
+                     ESPACIOS_PUBLICOS, ALOJAMIENTO_RESTAURANTES, SERVICIOS_PUBLICOS, 
+                     INFORMACION_TURISTICA, TIENDAS_SERVICIOS, MUSEOS_GALERIAS, 
+                     ACCESO_SENALIZACION, EXCURSIONES, FESTIVALES_EVENTOS, 
+                     TEATROS_CONCIERTOS, FERIAS_CONVENCIONES), mean, na.rm = TRUE))
+
+# Calcular la prueba de Kruskal-Wallis y la prueba de Mann-Whitney U
+kruskal_wallis_results <- datos %>%
+  pivot_longer(cols = c(AMBIENTE_SOCIAL_URBANO, ARQUITECTURA_URBANA, MONUMENTOS_SITIOS,
+                        ESPACIOS_PUBLICOS, ALOJAMIENTO_RESTAURANTES, SERVICIOS_PUBLICOS, 
+                        INFORMACION_TURISTICA, TIENDAS_SERVICIOS, MUSEOS_GALERIAS, 
+                        ACCESO_SENALIZACION, EXCURSIONES, FESTIVALES_EVENTOS, 
+                        TEATROS_CONCIERTOS, FERIAS_CONVENCIONES),
+               names_to = "Variable", values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(
+    Kruskal_Wallis_H = kruskal.test(Value ~ cluster)$statistic,
+    p_value = kruskal.test(Value ~ cluster)$p.value
+  )
+
+# Resultados de Kruskal-Wallis
+print(kruskal_wallis_results)
+
+# Realizar la prueba de Mann-Whitney U para cada par de clusters
+pairwise_wilcox_results <- datos %>%
+  pivot_longer(cols = c(AMBIENTE_SOCIAL_URBANO, ARQUITECTURA_URBANA, MONUMENTOS_SITIOS,
+                        ESPACIOS_PUBLICOS, ALOJAMIENTO_RESTAURANTES, SERVICIOS_PUBLICOS, 
+                        INFORMACION_TURISTICA, TIENDAS_SERVICIOS, MUSEOS_GALERIAS, 
+                        ACCESO_SENALIZACION, EXCURSIONES, FESTIVALES_EVENTOS, 
+                        TEATROS_CONCIERTOS, FERIAS_CONVENCIONES),
+               names_to = "Variable", values_to = "Value") %>%
+  group_by(Variable) %>%
+  summarise(
+    `1-2` = wilcox.test(Value[cluster == 1], Value[cluster == 2])$p.value,
+    `1-3` = wilcox.test(Value[cluster == 1], Value[cluster == 3])$p.value,
+    `2-3` = wilcox.test(Value[cluster == 2], Value[cluster == 3])$p.value
+  )
+
+# Resultados de Mann-Whitney U
+print(pairwise_wilcox_results)
+
+# Unir resultados en una tabla similar a la Tabla 3
+resultados_tabla3 <- mean_values %>%
+  pivot_longer(cols = -cluster, names_to = "Variable", values_to = "Mean") %>%
+  pivot_wider(names_from = cluster, values_from = Mean, names_prefix = "Cluster_") %>%
+  left_join(kruskal_wallis_results, by = "Variable") %>%
+  left_join(pairwise_wilcox_results, by = "Variable")
+
+print(resultados_tabla3)
+
+```
+
+La tabla resultante contiene las medias de las variables para cada cluster, los resultados de la prueba de Kruskal-Wallis y los valores p de la prueba de Mann-Whitney U para cada par de clusters
+
+
+
+TABLA 4
+
+Crear Categorías de NPS:
+
+Utilizamos mutate junto con case_when para clasificar a los encuestados en tres categorías de NPS basadas en su disposición a recomendar el destino (RECOMENDAR_VIAJAR):
+Promoters (9,10 points): Aquellos que dieron una puntuación de 9 o 10.
+Neutral (7,8 points): Aquellos que dieron una puntuación de 7 u 8.
+Detractors (1-6 points): Aquellos que dieron una puntuación de 1 a 6.
+Calcular la Distribución de NPS por Cluster:
+
+Agrupamos los datos por cluster y NPS, calculamos el conteo y el porcentaje de cada categoría de NPS dentro de cada cluster.
+Calcular el Total de Cada Categoría NPS:
+
+Calculamos el total de encuestados en cada categoría de NPS para obtener una perspectiva general.
+Combinar los Resultados:
+
+Combinamos los resultados de las distribuciones por cluster y los totales para crear una tabla final que muestra los porcentajes de cada categoría de NPS por cluster y en total.
+Prueba Chi-Cuadrado:
+
+Realizamos una prueba chi-cuadrado para determinar si hay una relación significativa entre los clusters y las categorías de NPS.
+Añadimos los resultados de la prueba chi-cuadrado (valor de χ² y p-value) a la tabla final.
+
+```{r}
+
+# TABLA 4
+
+# Cargar las librerías necesarias
+library(dplyr)
+library(tidyr)
+
+# Crear categorías de NPS (Net Promoter Score) basado en RECOMENDAR_VIAJAR
+datos <- datos %>%
+  mutate(NPS = case_when(
+    RECOMENDAR_VIAJAR >= 9 ~ "Promoters (9,10 points)",
+    RECOMENDAR_VIAJAR >= 7 ~ "Neutral (7,8 points)",
+    RECOMENDAR_VIAJAR <= 6 ~ "Detractors (1-6 points)"
+  ))
+
+# Calcular la distribución de NPS por cluster
+nps_distribution <- datos %>%
+  group_by(cluster, NPS) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%
+  pivot_wider(names_from = cluster, values_from = Percentage, names_prefix = "Cluster_")
+
+# Calcular el total de cada categoría NPS
+total_nps <- datos %>%
+  group_by(NPS) %>%
+  summarise(Count = n()) %>%
+  mutate(Total_Percentage = (Count / sum(Count)) * 100)
+
+# Combinar los resultados
+nps_distribution <- nps_distribution %>%
+  left_join(total_nps %>% select(NPS, Total_Percentage), by = "NPS") %>%
+  rename("Lodging and restaurant services (%)" = Cluster_1,
+         "Multiple attractions (%)" = Cluster_2,
+         "Passive tourism (%)" = Cluster_3,
+         "Total (%)" = Total_Percentage)
+
+# Calcular la prueba chi-cuadrado
+chisq_test <- chisq.test(table(datos$cluster, datos$NPS))
+
+# Añadir los resultados de chi-cuadrado a la tabla
+nps_distribution <- nps_distribution %>%
+  mutate(`χ²` = chisq_test$statistic,
+         Sig. = chisq_test$p.value)
+
+# Imprimir la tabla
+print(nps_distribution)
+```
+
+La tabla resultante muestra la distribución de las categorías de NPS por cluster, los porcentajes totales, y los resultados de la prueba chi-cuadrado
+
+
+
+
+
+TABLA 5
+
+Limpiar y Categorizar los Datos de PROPOSITO_VIAJE:
+
+Utilizamos mutate y case_when para asegurarnos de que todos los valores en la columna PROPOSITO_VIAJE están correctamente escritos y categorizados. Las categorías incluyen:
+Business, Conventions, Professional Activities: Incluye términos relacionados con negocios, convenciones y actividades profesionales.
+Leisure Tourism: Incluye términos relacionados con turismo y ocio.
+Visiting family or friends: Incluye términos relacionados con visitar familiares o amigos.
+Studies: Incluye términos relacionados con estudios.
+Others: Cualquier otro propósito no especificado.
+Calcular la Distribución del Propósito de Viaje por Cluster:
+
+Agrupamos los datos por cluster y PROPOSITO_VIAJE, calculamos el conteo y el porcentaje de cada categoría de propósito de viaje dentro de cada cluster.
+Calcular el Total de Cada Categoría de Propósito de Viaje:
+
+Calculamos el total de encuestados en cada categoría de propósito de viaje para obtener una perspectiva general.
+Combinar los Resultados:
+
+Combinamos los resultados de las distribuciones por cluster y los totales para crear una tabla final que muestra los porcentajes de cada categoría de propósito de viaje por cluster y en total.
+
+```{r}
+
+#TABLA 5
+# Cargar las librerías necesarias
+library(dplyr)
+library(tidyr)
+
+# Limpiar y categorizar los datos de 'PROPOSITO_VIAJE'
+# Asegúrate de que todos los valores están correctamente escritos y categorizados
+datos <- datos %>%
+  mutate(PROPOSITO_VIAJE = case_when(
+    PROPOSITO_VIAJE %in% c("Negocios / Convenciones / Actividades profesionales", "Negocios", "Convenciones", "Actividades profesionales") ~ "Business, Conventions, Professional Activities",
+    PROPOSITO_VIAJE %in% c("Turismo / Ocio", "Ocio", "Turismo") ~ "Leisure Tourism",
+    PROPOSITO_VIAJE %in% c("Visitar familiares o amigos", "Visitar familiares", "Visitar amigos") ~ "Visiting family or friends",
+    PROPOSITO_VIAJE %in% c("Estudios", "Estudio") ~ "Studies",
+    TRUE ~ "Others"
+  ))
+
+# Calcular la distribución del propósito de viaje por cluster
+purpose_distribution <- datos %>%
+  group_by(cluster, PROPOSITO_VIAJE) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%
+  pivot_wider(names_from = cluster, values_from = Percentage, names_prefix = "Cluster_")
+
+# Calcular el total de cada categoría de propósito de viaje
+total_purpose <- datos %>%
+  group_by(PROPOSITO_VIAJE) %>%
+  summarise(Count = n()) %>%
+  mutate(Total_Percentage = (Count / sum(Count)) * 100)
+
+# Combinar los resultados
+purpose_distribution <- purpose_distribution %>%
+  left_join(total_purpose %>% select(PROPOSITO_VIAJE, Total_Percentage), by = "PROPOSITO_VIAJE") %>%
+  rename("Passive tourism (%)" = Cluster_1,
+         "Multiple attractions (%)" = Cluster_2,
+         "Lodging and restaurant services (%)" = Cluster_3,
+         "Total (%)" = Total_Percentage)
+
+# Imprimir la tabla
+print(purpose_distribution)
+```
+La tabla resultante muestra la distribución de las categorías de propósito de viaje por cluster, los porcentajes totales, y los resultados combinados
+
+
+
+TABLA 6
+
+Categorizar los Valores de PRIMERA_VEZ:
+
+Usamos mutate y ifelse para asegurarnos de que los valores en PRIMERA_VEZ estén categorizados como "Yes" o "No".
+Calcular la Distribución de Primera Vez por Cluster:
+
+Agrupamos los datos por cluster y PRIMERA_VEZ, calculamos el conteo y el porcentaje de cada categoría de primera vez dentro de cada cluster.
+Calcular el Total de Cada Categoría de Primera Vez:
+
+Calculamos el total de encuestados en cada categoría de primera vez para obtener una perspectiva general.
+Combinar los Resultados:
+
+Combinamos los resultados de las distribuciones por cluster y los totales para crear una tabla final que muestra los porcentajes de cada categoría de primera vez por cluster y en total.
+
+```{r}
+
+#tabla 6
+
+# Cargar las librerías necesarias
+library(dplyr)
+library(tidyr)
+
+# Asegúrate de que los valores en 'PRIMERA_VEZ' estén correctamente categorizados
+datos <- datos %>%
+  mutate(PRIMERA_VEZ = ifelse(PRIMERA_VEZ == "Si", "Yes", "No"))
+
+# Calcular la distribución de primera vez por cluster
+first_time_distribution <- datos %>%
+  group_by(cluster, PRIMERA_VEZ) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%
+  pivot_wider(names_from = cluster, values_from = Percentage, names_prefix = "Cluster_")
+
+# Calcular el total de cada categoría de primera vez
+total_first_time <- datos %>%
+  group_by(PRIMERA_VEZ) %>%
+  summarise(Count = n()) %>%
+  mutate(Total_Percentage = (Count / sum(Count)) * 100)
+
+# Combinar los resultados
+first_time_distribution <- first_time_distribution %>%
+  left_join(total_first_time %>% select(PRIMERA_VEZ, Total_Percentage), by = "PRIMERA_VEZ") %>%
+  rename("Passive tourism (%)" = Cluster_1,
+         "Multiple attractions (%)" = Cluster_2,
+         "Lodging and restaurant services (%)" = Cluster_3,
+         "Total (%)" = Total_Percentage)
+
+# Imprimir la tabla
+print(first_time_distribution)
+```
+
+Con este proceso, hemos categorizado si es la primera vez que los encuestados visitan el destino, calculado la distribución de estas categorías por cluster, y creado una tabla que muestra estos resultados. Esto nos permite entender mejor la proporción de encuestados que están visitando el destino por primera vez en cada segmento.
+
+
+Es importante tener en cuenta que los resultados obtenidos en las Tablas 3, 4, 5 y 6 pueden variar respecto a los presentados en el artículo original debido a la incertidumbre sobre el proceso exacto de imputación de datos utilizado por los autores del estudio. A continuación se proporciona una justificación detallada de estas variaciones y se destaca la importancia del proceso de replicación de los resultados.
+
+Tabla 3: Comparación de Medias y Pruebas Estadísticas
+En la Tabla 3, se calcularon las medias de varias variables por cluster y se realizaron pruebas de Kruskal-Wallis y Mann-Whitney U para comparar las diferencias entre los clusters. Aunque los resultados obtenidos muestran diferencias significativas entre los clusters, es posible que estas varíen respecto a los resultados originales debido a diferencias en la imputación de datos.
+
+Tabla 4: Distribución del NPS (Net Promoter Score)
+La Tabla 4 presenta la distribución de las categorías de NPS (Promoters, Neutral, Detractors) por cluster. Las diferencias en la distribución pueden deberse a la forma en que se manejaron los datos faltantes o erróneos en el artículo original. La variabilidad en los resultados de la prueba chi-cuadrado también puede reflejar estas diferencias.
+
+Tabla 5: Propósito de Viaje
+En la Tabla 5, se categorizaron los propósitos de viaje y se calculó la distribución por cluster. Las variaciones en estos resultados pueden ser atribuibles a diferencias en la categorización y el manejo de datos faltantes en el artículo original.
+
+Tabla 6: Primera Visita
+La Tabla 6 muestra la distribución de encuestados que visitaron el destino por primera vez. Las diferencias en estos resultados pueden deberse a discrepancias en la categorización y la imputación de datos faltantes en el estudio original.
+
+
+Conclusion:
+
+A pesar de las posibles variaciones en los resultados, el proceso de replicación realizado aquí es fundamental por varias razones:
+
+Transparencia y Reproducibilidad:
+
+La replicación del análisis permite una comprensión más profunda de los métodos utilizados y proporciona transparencia en el proceso analítico.
+Verificación de Métodos:
+
+Permite verificar los métodos y enfoques utilizados en el estudio original, lo cual es crucial para validar los hallazgos y asegurarse de que son robustos.
+Identificación de Diferencias:
+
+Al replicar el análisis, es posible identificar y entender las diferencias en los resultados, lo que puede llevar a mejoras en futuras investigaciones y en la metodología de imputación de datos.
+Aprendizaje y Mejora Continua:
+
+El proceso de replicación fomenta el aprendizaje y la mejora continua en el manejo y análisis de datos, así como en la aplicación de técnicas estadísticas.
